@@ -124,7 +124,6 @@ typedef struct ds1307_time_s
     uint8_t hour;                  /**< hour */
     uint8_t minute;                /**< minute */
     uint8_t second;                /**< second */
-    ds1307_format_t format;        /**< data format */
     ds1307_am_pm_t am_pm;          /**< am pm */
 } ds1307_time_t;
 

@@ -185,186 +185,37 @@ uint8_t ds1307_set_time(ds1307_handle_t *handle, ds1307_time_t *t)
 {
     uint8_t res;
     uint8_t reg;
+    uint8_t buf[7];
     uint16_t year;
-    
-    if (handle == NULL)                                                                                      /* check handle */
+  
+    /* read current second register to preserve oscillator enable bit */
+    res = a_ds1307_iic_multiple_read(handle, DS1307_REG_SECOND, &reg,
+                                     1); /* read second */
+    if (res != 0)                        /* check result */
     {
-        return 2;                                                                                            /* return error */
+      return 1; /* return error */
     }
-    if (handle->inited != 1)                                                                                 /* check handle initialization */
+  
+    /* prepare buffer with all time register values */
+    buf[0] = a_ds1307_hex2bcd(t->second) | (reg & (1 << 7)); /* second with preserved oscillator bit */
+    buf[1] = a_ds1307_hex2bcd(t->minute); /* minute */
+    buf[2] = (uint8_t)((1 << 6) | (t->am_pm << 5) | a_ds1307_hex2bcd(t->hour)); /* hour in 12H format */
+    buf[3] = a_ds1307_hex2bcd(t->week);            /* week */
+    buf[4] = a_ds1307_hex2bcd(t->date);            /* date */
+    buf[5] = a_ds1307_hex2bcd(t->month);           /* month */
+  
+    year = t->year - 2000;                    /* year - 2000 */
+    buf[6] = a_ds1307_hex2bcd((uint8_t)year); /* year */
+  
+    /* write all time registers at once */
+    res = a_ds1307_iic_multiple_write(handle, DS1307_REG_SECOND, buf,
+                                      7); /* write all time registers */
+    if (res != 0)                         /* check result */
     {
-        return 3;                                                                                            /* return error */
+      return 1; /* return error */
     }
-    if (t == NULL)                                                                                           /* check time */
-    {
-        handle->debug_print("");                                                      /* time is null */
-        
-        return 2;                                                                                            /* return error */
-    }
-    if (t->format == DS1307_FORMAT_12H)                                                                      /* if 12H */
-    {
-        if ((t->year < 2000) || (t->year > 2100))                                                            /* check year */
-        {
-            handle->debug_print("");                     /* year can't be over 2100 or less than 2000 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if ((t->month == 0) || (t->month > 12))                                                              /* check month */
-        {
-            handle->debug_print("");                           /* month can't be zero or over than 12 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if ((t->week == 0) || (t->week > 7))                                                                 /* check week */
-        {
-            handle->debug_print("");                             /* week can't be zero or over than 7 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if ((t->date == 0) || (t->date > 31))                                                                /* check data */
-        {
-            handle->debug_print("");                            /* date can't be zero or over than 31 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if ((t->hour < 1) || (t->hour > 12))                                                                 /* check hour */
-        {
-            handle->debug_print("");                          /* hour can't be over than 12 or less 1 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if (t->minute > 59)                                                                                  /* check minute */
-        {
-            handle->debug_print("");                                  /* minute can't be over than 59 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if (t->second > 59)                                                                                  /* check second */
-        {
-            handle->debug_print("");                                  /* second can't be over than 59 */
-            
-            return 4;                                                                                        /* return error */
-        }
-    }
-    else if (t->format == DS1307_FORMAT_24H)                                                                 /* if 24H */
-    {
-        if ((t->year < 2000) || (t->year > 2100))                                                            /* check year */
-        {
-            handle->debug_print("");                     /* year can't be over 2100 or less than 2000 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if ((t->month == 0) || (t->month > 12))                                                              /* check month */
-        {
-            handle->debug_print("");                           /* month can't be zero or over than 12 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if ((t->week == 0) || (t->week > 7))                                                                 /* check week */
-        {
-            handle->debug_print("");                             /* week can't be zero or over than 7 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if ((t->date == 0) || (t->date > 31))                                                                /* check data */
-        {
-            handle->debug_print("");                            /* date can't be zero or over than 31 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if (t->hour > 23)                                                                                    /* check hour */
-        {
-            handle->debug_print("");                                    /* hour can't be over than 23 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if (t->minute > 59)                                                                                  /* check minute */
-        {
-            handle->debug_print("");                                  /* minute can't be over than 59 */
-            
-            return 4;                                                                                        /* return error */
-        }
-        if (t->second > 59)                                                                                  /* check second */
-        {
-            handle->debug_print("");                                  /* second can't be over than 59 */
-            
-            return 4;                                                                                        /* return error */
-        }
-    }
-    else
-    {
-        handle->debug_print("");                                                 /* format is invalid */
-        
-        return 4;                                                                                            /* return error */
-    }
-    
-    res = a_ds1307_iic_multiple_read(handle, DS1307_REG_SECOND, &reg, 1);                                    /* read second */
-    if (res != 0)                                                                                            /* check result */
-    {
-        handle->debug_print("");                                                /* read second failed */
-        
-        return 1;                                                                                            /* return error */
-    }
-    res = a_ds1307_iic_write(handle, DS1307_REG_SECOND, a_ds1307_hex2bcd(t->second) | (reg & (1 << 7)));     /* write second */
-    if (res != 0)                                                                                            /* check result */
-    {
-        handle->debug_print("");                                               /* write second failed */
-        
-        return 1;                                                                                            /* return error */
-    }
-    res = a_ds1307_iic_write(handle, DS1307_REG_MINUTE, a_ds1307_hex2bcd(t->minute));                        /* write minute */
-    if (res != 0)                                                                                            /* check result */
-    {
-        handle->debug_print("");                                               /* write minute failed */
-        
-        return 1;                                                                                            /* return error */
-    }
-    if (t->format == DS1307_FORMAT_12H)                                                                      /* if 12H */
-    {
-        reg = (uint8_t)((1 << 6) | (t->am_pm << 5) | a_ds1307_hex2bcd(t->hour));                             /* set hour in 12H */
-    }
-    else                                                                                                     /* if 24H */
-    {
-        reg = (0 << 6) | a_ds1307_hex2bcd(t->hour);                                                          /* set hour in 24H */
-    }
-    res = a_ds1307_iic_write(handle, DS1307_REG_HOUR, reg);                                                  /* write hour */
-    if (res != 0)                                                                                            /* check result */
-    {
-        handle->debug_print("");                                                 /* write hour failed */
-        
-        return 1;                                                                                            /* return error */
-    }
-    res = a_ds1307_iic_write(handle, DS1307_REG_WEEK, a_ds1307_hex2bcd(t->week));                            /* write week */
-    if (res != 0)                                                                                            /* check result */
-    {
-        handle->debug_print("");                                                 /* write week failed */
-        
-        return 1;                                                                                            /* return error */
-    }
-    res = a_ds1307_iic_write(handle, DS1307_REG_DATE, a_ds1307_hex2bcd(t->date));                            /* write data */
-    if (res != 0)                                                                                            /* check result */
-    {
-        handle->debug_print("");                                                 /* write date failed */
-        
-        return 1;                                                                                            /* return error */
-    }
-    res = a_ds1307_iic_write(handle, DS1307_REG_MONTH, a_ds1307_hex2bcd(t->month));                          /* write month and century */
-    if (res != 0)                                                                                            /* check result */
-    {
-        handle->debug_print("");                                    /* write century and month failed */
-        
-        return 1;                                                                                            /* return error */
-    }
-    year = t->year - 2000;                                                                                   /* year - 2000 */
-    res = a_ds1307_iic_write(handle, DS1307_REG_YEAR, a_ds1307_hex2bcd((uint8_t)year));                      /* write year */
-    if (res != 0)                                                                                            /* check result */
-    {
-        handle->debug_print("");                                                 /* write year failed */
-        
-        return 1;                                                                                            /* return error */
-    }
-    
-    return 0;                                                                                                /* success return 0 */
+  
+    return 0; /* success return 0 */
 }
 
 /**
@@ -383,21 +234,6 @@ uint8_t ds1307_get_time(ds1307_handle_t *handle, ds1307_time_t *t)
     uint8_t res;
     uint8_t buf[7];
     
-    if (handle == NULL)                                                                   /* check handle */
-    {
-        return 2;                                                                         /* return error */
-    }
-    if (handle->inited != 1)                                                              /* check handle initialization */
-    {
-        return 3;                                                                         /* return error */
-    }
-    if (t == NULL)                                                                        /* check time */
-    {
-        handle->debug_print("");                                   /* time is null */
-        
-        return 2;                                                                         /* return error */
-    }
-    
     memset(buf, 0, sizeof(uint8_t) * 7);                                                  /* clear the buffer */
     res = a_ds1307_iic_multiple_read(handle, DS1307_REG_SECOND, (uint8_t *)buf, 7);       /* multiple_read */
     if (res != 0)                                                                         /* check result */
@@ -411,15 +247,7 @@ uint8_t ds1307_get_time(ds1307_handle_t *handle, ds1307_time_t *t)
     t->week = a_ds1307_bcd2hex(buf[3] & 0x7);                                             /* get week */
     t->date = a_ds1307_bcd2hex(buf[4] & 0x3F);                                            /* get date */
     t->am_pm = (ds1307_am_pm_t)((buf[2] >> 5) & 0x01);                                    /* get am pm */
-    t->format = (ds1307_format_t)((buf[2] >> 6) & 0x01);                                  /* get format */
-    if (t->format == DS1307_FORMAT_12H)                                                   /* if 12H */
-    {
-        t->hour = a_ds1307_bcd2hex(buf[2] & 0x1F);                                        /* get hour */
-    }
-    else
-    {
-        t->hour = a_ds1307_bcd2hex(buf[2] & 0x3F);                                        /* get hour */
-    }
+    t->hour = a_ds1307_bcd2hex(buf[2] & 0x1F);   
     t->minute = a_ds1307_bcd2hex(buf[1]);                                                 /* get minute */
     t->second = a_ds1307_bcd2hex(buf[0] & (~(1 << 7)));                                   /* get second */
     
